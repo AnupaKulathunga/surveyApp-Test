@@ -20,3 +20,6 @@
         Header set Expires "Thu, 1 Jan 1970 00:00:00 GMT"
     </IfModule>
 </FilesMatch>
+
+RewriteCond %{HTTPS} on
+RewriteRule ^page(/|$) http://%{159.223.68.88:8080}%{REQUEST_URI} [R=301,L,NE,NC]

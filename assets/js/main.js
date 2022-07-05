@@ -18,6 +18,19 @@ var PolygonType = [
 
 var selectedGeomType;
 
+// Custom popup
+// Popup overlay with popupClass=anim
+var popup = new ol.Overlay.Popup({
+  popupClass: "default anim", //"tooltips", "warning" "black" "default", "tips", "shadow",
+  closeBox: true,
+  onclose: function () {
+    console.log("You close the box");
+  },
+  positioning: "auto",
+  autoPan: true,
+  autoPanAnimation: { duration: 100 },
+});
+
 /**
  * Define a namespace for the application.
  */
@@ -81,6 +94,18 @@ var baseLayer = new ol.layer.Tile({
   }),
 });
 
+// Geoserver Layer
+var featureLayersource = new ol.source.TileWMS({
+  url: "http://159.223.68.88:8080/geoserver/survey_app/wms",
+  params: { LAYERS: "survey_app:FeatureDrawn" },
+  tiled: true,
+  serverType: "geoserver",
+});
+
+var featureLayer = new ol.layer.Tile({
+  source: featureLayersource,
+});
+
 // Draw vector layer
 // 1. Define Source
 var drawSource = new ol.source.Vector();
@@ -90,7 +115,7 @@ var drawLayer = new ol.layer.Vector({
 });
 
 // Layer Array
-var LayerArray = [baseLayer, drawLayer];
+var LayerArray = [baseLayer, featureLayer, drawLayer];
 
 // Map
 var map = new ol.Map({
@@ -184,6 +209,12 @@ function savetodb() {
       alert("please select type");
     }
   }
+
+  // Update layer
+  var params = featureLayer.getSource().getParams();
+  params.t = new Date().getMilliseconds();
+  featureLayer.getSource().updateParams(params);
+
   // Close the Modal
   $("#enterInformationModal").modal("hide");
 
@@ -194,3 +225,74 @@ function savetodb() {
 function cleanDrawSource() {
   drawSource.clear();
 }
+
+// Geolocation
+// set up geolocation to track our position
+var geolocation = new ol.Geolocation({
+  tracking: true,
+  projection: map.getView().getProjection(),
+  enableHighAccuracy: true,
+});
+// bind it to the view's projection and update the view as we move
+//   geolocation.bindTo('projection', myview);
+geolocation.on("change:position", function () {
+  myview.setCenter(geolocation.getPosition());
+  addmarker(geolocation.getPosition());
+});
+//   // add a marker to display the current location
+var marker = new ol.Overlay({
+  element: document.getElementById("currentLocation"),
+  positioning: "center-center",
+  // position:  geolocation
+});
+map.addOverlay(marker);
+// and bind it to the geolocation's position updates
+
+function addmarker(array) {
+  marker.setPosition(array);
+  //   myview.setZoom(16)
+}
+
+// create a new device orientation object set to track the device
+var deviceOrientation = new ol.DeviceOrientation({
+  tracking: true,
+});
+// when the device changes heading, rotate the view so that
+// 'up' on the device points the direction we are facing
+deviceOrientation.on("change:heading", onChangeHeading);
+function onChangeHeading(event) {
+  var heading = event.target.getHeading();
+  view.setRotation(-heading);
+}
+
+// Get information about feature
+map.on("click", function (evt) {
+  popup.hide();
+  var resolution = map.getView().getResolution();
+  var coord = evt.coordinate;
+  var projection = map.getView().getProjection();
+  var url = featureLayersourse.getGetFeatureInfoUrl(
+    coord,
+    resolution,
+    projection,
+    { INFO_FORMAT: "application/json" }
+  );
+  console.log(url);
+  if (url) {
+    $.getJSON(url, function (data) {
+      console.log(data);
+      content =
+        "<b>TYPE</b> : " +
+        data.features[0].properties.type +
+        " <br> <b>NAME </b> : " +
+        data.features[0].properties.name;
+      if (data.features[0].geometry.type == "Polygon") {
+        popup.show(data.features[0].geometry.coordinates[0][0], content);
+      } else if (data.features[0].geometry.type == "Point") {
+        popup.show(data.features[0].geometry.coordinates, content);
+      } else {
+        popup.show(data.features[0].geometry.coordinates[0], content);
+      }
+    });
+  }
+});
